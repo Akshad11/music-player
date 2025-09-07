@@ -3,8 +3,13 @@ const path = require('node:path');
 const fs = require('fs');
 const mm = require('music-metadata');
 const { randomUUID } = require('node:crypto');
+const ini = require('ini');
 
 let win;
+
+let activeSongPath = null;
+let activeFolderPath = null;
+let activeSongID = null;
 
 function createWindow() {
     win = new BrowserWindow({
@@ -38,6 +43,36 @@ ipcMain.handle("select-audio", async () => {
         .map(file => path.join(folderPath, file));
 
     const songs = [];
+    await getAudioData(files, songs);
+    return songs;
+});
+
+//load songs from a given folder path
+ipcMain.handle("load-songs", async (event, folderPath) => {
+    if (!folderPath || !fs.existsSync(folderPath)) {
+        return [];
+    }
+
+    const audioExtensions = ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'];
+
+    const files = fs.readdirSync(folderPath)
+        .filter(file => audioExtensions.includes(path.extname(file).toLowerCase()))
+        .map(file => path.join(folderPath, file));
+
+    const songs = [];
+    await getAudioData(files, songs);
+    return songs;
+});
+
+// Save ini file of last folder and song
+ipcMain.handle("save-config", async (event, { songPath, songID }) => {
+    activeFolderPath = path.dirname(songPath);
+    activeSongPath = songPath;
+    activeSongID = songID;
+    return true;
+});
+
+async function getAudioData(files, songs) {
     for (const file of files) {
         try {
             const metadata = await mm.parseFile(file);
@@ -82,9 +117,37 @@ ipcMain.handle("select-audio", async () => {
             });
         }
     }
-    return songs;
-});
+}
 
+//function to save config file
+function saveConfig() {
+    if (activeFolderPath && activeSongPath) {
+        const configPath = path.join(__dirname, "config.ini");
+        const config = {
+            Player: {
+                lastFolder: activeFolderPath,
+                lastSong: activeSongPath,
+                lastSongID: activeSongID
+            }
+        };
+        try {
+            fs.writeFileSync(configPath, ini.stringify(config));
+        } catch (error) {
+            console.error("Failed to save config:", error);
+        }
+    }
+}
+
+//get config file of last folder and song
+ipcMain.handle("load-config", () => {
+    const configPath = path.join(__dirname, "config.ini");
+    if (fs.existsSync(configPath)) {
+        const content = fs.readFileSync(configPath, "utf-8");
+        const config = ini.parse(content);
+        return config.Player;
+    }
+    return null; // If file doesn’t exist
+});
 
 async function writeCoverToFileAsync(base64Data, filePath) {
     if (!base64Data) return; // Skip if no cover
@@ -107,5 +170,6 @@ app.whenReady().then(() => {
 })
 
 app.on("window-all-closed", () => {
+    saveConfig();
     if (process.platform !== "darwin") app.quit();
 })
