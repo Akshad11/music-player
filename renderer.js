@@ -14,11 +14,65 @@ const nextBtn = document.getElementById("nextBtn");
 
 let songs = [];
 
-// const folderInput = document.getElementById("folderInput");
+//on load, check for last folder and load songs
+window.onload = async () => {
+    const config = await window.electron.loadConfig();
+    if (config) {
+        const { lastFolder, lastSong } = config;
+        // alert(`Loading last session from folder: ${lastFolder}`);
+        // Load songs from the last folder
+        songs = await window.electron.loadSongs(lastFolder);
+        if (songs && songs.length > 0) {
+            //Set loading for folder click btn
+            selectFolderBtn.textContent = "loading";
+            selectFolderBtn.disabled = true;
+
+            folderSelectDiv.classList.add("hidden");
+            musicListDiv.classList.remove("hidden");
+            listAllSongs(songs);
+            setupHoverEffects();
+            // If there was a last song, play it
+            // alert(`Resuming last session. Playing: ${lastSong}`);
+            if (lastSong) {
+                const lastPlayedSong = songs.find(s => s.path === lastSong);
+                if (lastPlayedSong) {
+                    playSong(lastPlayedSong.id);
+                }
+            }
+        }
+
+
+    };
+    selectFolderBtn.textContent = "Select Music Folder";
+    selectFolderBtn.disabled = false;
+};
+
+//function to send last session data to main process
+async function saveLastSession(songId) {
+
+    const song = songs.find(s => s.id === songId);
+    if (song) {
+        // Call Electron API to save config
+        const success = await window.electron.saveConfig(song.path, songId);
+        // if (success) {
+        //     alert("Last session saved successfully.");
+        // } else {
+        //     alert("Failed to save last session.");
+        // }
+    }
+}
 
 
 // Event listeners for navigation buttons
 listBackBtn.addEventListener("click", () => {
+    if (audio) {
+        alert("Going to main screen. Music will stop playing.", { type: "warning" },);
+        audio.pause();
+        audio.currentTime = 0;
+        audio = null;
+        currentSongId = null;
+        playBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+    }
     musicListDiv.classList.add("hidden");
     folderSelectDiv.classList.remove("hidden");
 });
@@ -52,7 +106,7 @@ function playSong(songId) {
     if (song) {
         musicListDiv.classList.add("hidden");
         musicPlayerDiv.classList.remove("hidden");
-
+        saveLastSession(songId);
         currentSongTitle.textContent = song.title;
         currentSongArtist.textContent = song.artist;
 
@@ -64,18 +118,25 @@ function playSong(songId) {
         audio = new Audio(song.path);
         currentSongId = songId;
         audio.play();
-        playBtn.textContent = "Pause";
+        playBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
 
         playBtn.onclick = () => {
             if (audio.paused) {
                 audio.play();
-                playBtn.textContent = "Pause";
+                playBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
             } else {
                 audio.pause();
-                playBtn.textContent = "Play";
+                playBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+
             }
         };
         prevBtn.onclick = () => {
+            //Restart song logic
+            audio.currentTime = 0;
+            audio.play();
+            playBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        };
+        prevBtn.ondblclick = () => {
             // Logic to play previous song
             const currentIndex = songs.findIndex(s => s.id === currentSongId);
             const prevIndex = (currentIndex - 1 + songs.length) % songs.length;
@@ -91,6 +152,9 @@ function playSong(songId) {
         // Update play button when song ends
         audio.onended = () => {
             playBtn.textContent = "Play";
+            const currentIndex = songs.findIndex(s => s.id === currentSongId);
+            const nextIndex = (currentIndex + 1) % songs.length;
+            playSong(songs[nextIndex].id);
         };
 
         //Progress bar update

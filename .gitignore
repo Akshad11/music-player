@@ -7,3 +7,4 @@ dist/
 dist/
 test/
 package-lock.json
+config.ini
