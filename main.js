@@ -10,6 +10,7 @@ let win;
 let activeSongPath = null;
 let activeFolderPath = null;
 let activeSongID = null;
+const userDataPath = app.getPath("userData");
 
 function createWindow() {
     win = new BrowserWindow({
@@ -122,7 +123,7 @@ async function getAudioData(files, songs) {
 //function to save config file
 function saveConfig() {
     if (activeFolderPath && activeSongPath) {
-        const configPath = path.join(__dirname, "config.ini");
+        const configPath = path.join(userDataPath, "config.ini");
         const config = {
             Player: {
                 lastFolder: activeFolderPath,
@@ -140,7 +141,7 @@ function saveConfig() {
 
 //get config file of last folder and song
 ipcMain.handle("load-config", () => {
-    const configPath = path.join(__dirname, "config.ini");
+    const configPath = path.join(userDataPath, "config.ini");
     if (fs.existsSync(configPath)) {
         const content = fs.readFileSync(configPath, "utf-8");
         const config = ini.parse(content);
